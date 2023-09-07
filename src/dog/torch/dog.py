@@ -20,7 +20,7 @@ class DoG(Optimizer):
     __version__ = '1.1.0'
 
     def __init__(self, params, reps_rel: float = 1e-6, lr: float = 1.0,
-                 weight_decay: float = 0.0, eps: float = 1e-8, init_eta: Optional[float] = None):
+                 weight_decay: float = 0.0, eps: float = 1e-8, init_eta: Optional[float] = None, decay_to_x0: bool = True):
         r"""Distance over Gradients - an adaptive stochastic optimizer.
 
         DoG updates parameters x_t with stochastic gradients g_t according to:
@@ -83,7 +83,7 @@ class DoG(Optimizer):
 
         self._first_step = True
 
-        defaults = dict(reps_rel=reps_rel, lr=lr, weight_decay=weight_decay, eps=eps, init_eta=init_eta)
+        defaults = dict(reps_rel=reps_rel, lr=lr, weight_decay=weight_decay, eps=eps, init_eta=init_eta, decay_to_x0=decay_to_x0)
         super(DoG, self).__init__(params, defaults)
 
     def __setstate__(self, state):
@@ -137,8 +137,10 @@ class DoG(Optimizer):
                 init = group['init_buffer']
 
             if weight_decay > 0:
-                for p in group['params']:
-                    p.grad.add_(p, alpha=weight_decay)
+                for p, init_p in zip(group['params'], group['init_buffer']):
+                    # the decay term is now (p - init_p) instead of just p, if we decay to init and not to 0
+                    decay_term = p - init_p if group['decay_to_x0'] else p
+                    p.grad.add_(decay_term, alpha=weight_decay)
 
             self._update_group_state(group, init)
             self._override_init_eta_if_needed(group)
